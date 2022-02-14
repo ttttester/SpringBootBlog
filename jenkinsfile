@@ -1,0 +1,48 @@
+//git凭证ID
+def git_auth = "54be664a-d6e4-42bb-98e3-920b999c35aa"
+//git的url地址
+def git_url = "git@192.168.132.10:root/springbootblog.git"
+//镜像的版本号
+def tag = "latest"
+//Harbor的url地址
+def harbor_url = "192.168.132.12:85"
+//镜像库项目名称
+def harbor_project = "blog"
+//Harbor的登录凭证ID
+def harbor_auth = "92da4da1-8364-4388-aa22-9b3fa5b775d9"
+def currentProjectName = "my-blog"
+
+
+node {
+   stage('pull code') {
+      checkout([$class: 'GitSCM', branches: [[name: "*/${branch}"]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "${git_auth}", url: "${git_url}"]]])
+   }
+//   stage('sonar scan') {
+// 		//定义当前Jenkins的SonarQubeScanner工具
+// 		def scannerHome = tool 'SonarQube-scanner'
+// 		//引用当前JenkinsSonarQube环境
+// 		withSonarQubeEnv('SonarQube9.3') {
+// 			 sh """
+// 					 cd ${currentProjectName}
+// 					 ${scannerHome}/bin/sonar-scanner
+// 			 """
+// 		}
+//   }
+   stage('build project, push docker to harbor') {
+		 sh "mvn clean package dockerfile:build"
+		 //定义镜像名称
+		 def imageName = "${currentProjectName}:${tag}"
+		 //对镜像打上标签
+		 sh "docker tag ${imageName} ${harbor_url}/${harbor_project}/${imageName}"
+		//把镜像推送到Harbor
+		withCredentials([usernamePassword(credentialsId: "${harbor_auth}", passwordVariable: 'password', usernameVariable: 'username')]) {
+			//登录到Harbor
+			sh "docker login -u ${username} -p ${password} ${harbor_url}"
+			//镜像上传
+			sh "docker push ${harbor_url}/${harbor_project}/${imageName}"
+			sh "echo 镜像上传成功"
+		}
+        echo "启动容器"
+    }
+}
+
